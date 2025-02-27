@@ -231,17 +231,12 @@ class MMFi_Dataset(Dataset):
                 data.append(data_tmp)
         elif mod == 'wifi-csi':
             for csi_mat in sorted(glob.glob(os.path.join(dir, "frame*.mat"))):
-                data_mat = scio.loadmat(csi_mat)['CSIamp']
-                data_mat[np.isinf(data_mat)] = np.nan
-                for i in range(10):  # 32
-                    temp_col = data_mat[:, :, i]
-                    nan_num = np.count_nonzero(temp_col != temp_col)
-                    if nan_num != 0:
-                        temp_not_nan_col = temp_col[temp_col == temp_col]
-                        temp_col[np.isnan(temp_col)] = temp_not_nan_col.mean()
-                data_mat = (data_mat - np.min(data_mat)) / (np.max(data_mat) - np.min(data_mat))
-                data_frame = np.array(data_mat)
-                data.append(data_frame)
+                data_amp = scio.loadmat(csi_mat)['CSIamp']
+                data_amp[np.isinf(data_amp)] = np.nan
+                data_pha = scio.loadmat(csi_mat)['CSIphase']
+                data_pha[np.isinf(data_pha)] = np.nan
+                data_com = np.vectorize(complex)(data_amp, data_pha)
+                data.append(data_com)
             data = np.array(data)
         else:
             raise ValueError('Found unseen modality in this dataset.')
@@ -266,15 +261,11 @@ class MMFi_Dataset(Dataset):
                 data = data.copy().reshape(-1, 5)
                 # data = data[:, :3]
         elif mod == 'wifi-csi':
-            data = scio.loadmat(frame)['CSIamp']
-            data[np.isinf(data)] = np.nan
-            for i in range(10):  # 32
-                temp_col = data[:, :, i]
-                nan_num = np.count_nonzero(temp_col != temp_col)
-                if nan_num != 0:
-                    temp_not_nan_col = temp_col[temp_col == temp_col]
-                    temp_col[np.isnan(temp_col)] = temp_not_nan_col.mean()
-            data = (data - np.min(data)) / (np.max(data) - np.min(data))
+            data_amp = scio.loadmat(frame)['CSIamp']
+            data_amp[np.isinf(data_amp)] = np.nan
+            data_pha = scio.loadmat(frame)['CSIphase']
+            data_pha[np.isinf(data_pha)] = np.nan
+            data = np.vectorize(complex)(data_amp, data_pha)
         else:
             raise ValueError('Found unseen modality in this dataset.')
         return data
