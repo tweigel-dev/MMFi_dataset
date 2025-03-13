@@ -12,18 +12,96 @@ from torch.utils.data import Dataset, DataLoader
 
 
 
+class Modality:
+    def __init__(self, name: str, file_ending: str) -> None:
+        self.name = name
+        self.file_ending = file_ending
 
+    def read_dir(self, path: str | Path):
+        raise NotImplementedError()
 
-modalitys:dict[str:str] = {
-    'rgb': ".npy",
-    'infra1': ".npy",
-    'infra2': ".npy",
-    'depth': ".png",
-    'lidar': ".bin",
-    'mmwave': ".bin",
-    'wifi-csi': ".mat",
-    'wifi-csi-amp': ".mat",
-    'wifi-csi-pha': ".mat",
+    def read_frame(self, frame: str | Path):
+        raise NotImplementedError()
+    def __str__(self) -> str:
+        return self.name
+class KeypointModality(Modality):
+    def read_dir(self, path: str | Path):
+        return np.array([np.load(f) for f in sorted(glob.glob(os.path.join(path, "frame*.npy")))])
+
+    def read_frame(self, frame: str | Path):
+        return np.load(frame)
+
+class DepthModality(Modality):
+    def read_dir(self, path: str | Path):
+        return np.array([cv2.imread(f, cv2.IMREAD_UNCHANGED) * 0.001 for f in sorted(glob.glob(os.path.join(path, "frame*.png")))])
+
+    def read_frame(self, frame: str | Path):
+        return cv2.imread(frame, cv2.IMREAD_UNCHANGED) * 0.001
+
+class LidarModality(Modality):
+    def read_dir(self, path: str | Path):
+        return [self._read_bin(f) for f in sorted(glob.glob(os.path.join(path, "frame*.bin")))]
+
+    def read_frame(self, frame: str | Path):
+        return self._read_bin(frame)
+
+    def _read_bin(self, file: str | Path):
+        with open(file, 'rb') as f:
+            data = np.frombuffer(f.read(), dtype=np.float64)
+            return data.reshape(-1, 3)
+
+class MmwaveModality(Modality):
+    def read_dir(self, path: str | Path):
+        return [self._read_bin(f) for f in sorted(glob.glob(os.path.join(path, "frame*.bin")))]
+
+    def read_frame(self, frame: str | Path):
+        return self._read_bin(frame)
+
+    def _read_bin(self, file: str | Path):
+        with open(file, 'rb') as f:
+            data = np.frombuffer(f.read(), dtype=np.float64)
+            return data.copy().reshape(-1, 5)
+
+class WifiCSIModality(Modality):
+    def read_dir(self, path: str | Path):
+        return np.array([self._process_mat(f) for f in sorted(glob.glob(os.path.join(path, "frame*.mat")))])
+
+    def read_frame(self, frame: str | Path):
+        return self._process_mat(frame)
+
+    def _process_mat(self, file: str | Path):
+        data_amp = scio.loadmat(file)['CSIamp']
+        data_pha = scio.loadmat(file)['CSIphase']
+        data = np.vectorize(complex)(data_amp, data_pha)
+        return self._interpolate_nan_inf(data)
+
+    def _interpolate_nan_inf(self, csi_frame: np.ndarray):
+        for i in range(10):
+            temp_col = csi_frame[:, :, i]
+            if np.isnan(temp_col).any():
+                temp_col[np.isnan(temp_col)] = np.nanmean(temp_col)
+        return csi_frame
+
+class WifiCSIAmplitudeModality(WifiCSIModality):
+    def _process_mat(self, file: str | Path):
+        data_amp = scio.loadmat(file)['CSIamp']
+        return self._interpolate_nan_inf(data_amp)
+
+class WifiCSIPhaseModality(WifiCSIModality):
+    def _process_mat(self, file: str | Path):
+        data_pha = scio.loadmat(file)['CSIphase']
+        return self._interpolate_nan_inf(data_pha)
+
+MODALITY_MAP:dict[str,Modality] = {
+    'infra1': KeypointModality('infra1', '.npy'),
+    'infra2': KeypointModality('infra2', '.npy'),
+    'rgb': KeypointModality('rgb', '.npy'),
+    'depth': DepthModality('depth', '.png'),
+    'lidar': LidarModality('lidar', '.bin'),
+    'mmwave': MmwaveModality('mmwave', '.bin'),
+    'wifi-csi': WifiCSIModality('wifi-csi', '.mat'),
+    'wifi-csi-amp': WifiCSIAmplitudeModality('wifi-csi-amp', '.mat'),
+    'wifi-csi-pha': WifiCSIPhaseModality('wifi-csi-pha', '.mat')
 }
 
 def decode_config(config):
@@ -90,11 +168,11 @@ def decode_config(config):
         for subject in subjects_val:
             val_form[subject] = actions_val
 
-    dataset_config = {'train_dataset': {'modality': config['modality'],
+    dataset_config = {'train_dataset': {'modalities': config['modalities'],
                                         'split': 'training',
                                         'data_form': train_form
                                         },
-                      'val_dataset': {'modality': config['modality'],
+                      'val_dataset': {'modalities': config['modalities'],
                                       'split': 'validation',
                                       'data_form': val_form}}
     return dataset_config
@@ -106,7 +184,7 @@ class MMFi_Database:
         self.scenes = {}
         self.subjects = {}
         self.actions = {}
-        self.modalities = {}
+        self.modalities:list[Modality] = {}
         self.load_database()
 
     def load_database(self):
@@ -132,228 +210,137 @@ class MMFi_Database:
                         self.actions[action][scene] = {}
                     if subject not in self.actions[action][scene].keys():
                         self.actions[action][scene][subject] = {}
-                    for modality in modalitys.keys():
-                        data_path = os.path.join(self.data_root, scene, subject, action, modality)
-                        self.scenes[scene][subject][action][modality] = data_path
-                        self.subjects[subject][action][modality] = data_path
-                        self.actions[action][scene][subject][modality] = data_path
-                        if modality not in self.modalities.keys():
-                            self.modalities[modality] = {}
-                        if scene not in self.modalities[modality].keys():
-                            self.modalities[modality][scene] = {}
-                        if subject not in self.modalities[modality][scene].keys():
-                            self.modalities[modality][scene][subject] = {}
-                        if action not in self.modalities[modality][scene][subject].keys():
-                            self.modalities[modality][scene][subject][action] = data_path
-
+                    for modality in self.modalities:
+                        data_path = os.path.join(self.data_root, scene, subject, action, modality.name)
+                        self.scenes[scene][subject][action][modality.name] = data_path
+                        self.subjects[subject][action][modality.name] = data_path
+                        self.actions[action][scene][subject][modality.name] = data_path
 
 class MMFi_Dataset(Dataset):
-    def __init__(self, data_base, data_unit, modality, split, data_form):
+    def __init__(self, data_base, modalities:list[list], split, data_form):
         self.data_base = data_base
-        self.data_unit = data_unit
-        self.modality = modality.split('|')
-        for m in self.modality:
-            assert m in modalitys.keys()
+        self.modalities = [MODALITY_MAP[m_str] for m_str in modalities]
         self.split = split
         self.data_source = data_form
         self.data_list = self.load_data()
 
     def get_scene(self, subject):
-        if subject in ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07', 'S08', 'S09', 'S10']:
-            return 'E01'
-        elif subject in ['S11', 'S12', 'S13', 'S14', 'S15', 'S16', 'S17', 'S18', 'S19', 'S20']:
-            return 'E02'
-        elif subject in ['S21', 'S22', 'S23', 'S24', 'S25', 'S26', 'S27', 'S28', 'S29', 'S30']:
-            return 'E03'
-        elif subject in ['S31', 'S32', 'S33', 'S34', 'S35', 'S36', 'S37', 'S38', 'S39', 'S40']:
-            return 'E04'
-        else:
-            raise ValueError('Subject does not exist in this dataset.')
+        scenes = {range(1, 11): 'E01', range(11, 21): 'E02', range(21, 31): 'E03', range(31, 41): 'E04'}
+        for key, value in scenes.items():
+            if int(subject[1:]) in key:
+                return value
+        raise ValueError('Subject does not exist in this dataset.')
 
+    def load_data(self):
+        raise NotImplementedError("use MMFI_DatasetFrame or MMFI_DatasetSequence")
 
+    def __getitem__(self, idx):
+        raise NotImplementedError("use MMFI_DatasetFrame or MMFI_DatasetSequence")
+
+    def __len__(self):
+        return len(self.data_list)
+
+class MMFI_DatasetFrame(MMFi_Dataset):
     def load_data(self):
         data_info = []
         for subject, actions in self.data_source.items():
             for action in actions:
-                if self.data_unit == 'sequence':
-                    data_dict = {'modality': self.modality,
-                                 'scene': self.get_scene(subject),
-                                 'subject': subject,
-                                 'action': action,
-                                 'gt_path': os.path.join(self.data_base.data_root, self.get_scene(subject), subject,
-                                                         action, 'ground_truth.npy')
-                                 }
-                    for mod in self.modality:
-                        data_dict[mod+'_path'] = os.path.join(self.data_base.data_root, self.get_scene(subject), subject,
-                                                         action, mod)
-                    data_info.append(data_dict)
-                elif self.data_unit == 'frame':
-                    frame_num = 297
-                    for idx in range(frame_num):
-                        data_dict = {'modality': self.modality,
-                                     'scene': self.get_scene(subject),
-                                     'subject': subject,
-                                     'action': action,
-                                     'gt_path': os.path.join(self.data_base.data_root, self.get_scene(subject), subject,
-                                                             action, 'ground_truth.npy'),
-                                     'idx': idx
-                                     }
-                        data_valid = True
-                        for mod in self.modality:
-                            data_dict[mod+'_path'] = os.path.join(self.data_base.data_root, self.get_scene(subject), subject, action, mod, "frame{:03d}".format(idx+1) + modalitys[mod])
+                frame_num = 297
+                for idx in range(frame_num):
+                    data_dict = {'modalities': [m.name for m in self.modalities],
+                                    'scene': self.get_scene(subject),
+                                    'subject': subject,
+                                    'action': action,
+                                    'gt_path': os.path.join(self.data_base.data_root, self.get_scene(subject), subject,
+                                                            action, 'ground_truth.npy'),
+                                    'idx': idx
+                                    }
+                    data_valid = True
+                    for mod in self.modalities:
+                        data_dict[mod.name+'_path'] = os.path.join(self.data_base.data_root, self.get_scene(subject), subject, action, mod.name, "frame{:03d}".format(idx+1) + mod.file_ending)
 
-                            if os.path.getsize(data_dict[mod+'_path']) == 0:
-                                data_valid = False
-                        if data_valid:
-                            data_info.append(data_dict)
-                else:
-                    raise ValueError('Unsupport data unit!')
+                        if os.path.getsize(data_dict[mod.name+'_path']) == 0:
+                            data_valid = False
+                    if data_valid:
+                        data_info.append(data_dict)
         return data_info
-
-    def read_dir(self, dir):
-        _, mod = os.path.split(dir)
-        data = []
-        if mod in ['infra1', 'infra2', 'rgb']:  # rgb, infra1 and infra2 are 2D keypoints
-            for arr_file in sorted(glob.glob(os.path.join(dir, "frame*.npy"))):
-                arr = np.load(arr_file)
-                data.append(arr)
-            data = np.array(data)
-        elif mod == 'depth':
-            for img in sorted(glob.glob(os.path.join(dir, "frame*.png"))):
-                _cv_img = cv2.imread(img, cv2.IMREAD_UNCHANGED)  # Default depth value is 16-bit
-                _cv_img *= 0.001  # Convert unit to meter
-                data.append(_cv_img)
-            data = np.array(data)
-        elif mod == 'lidar':
-            for bin_file in sorted(glob.glob(os.path.join(dir, "frame*.bin"))):
-                with open(bin_file, 'rb') as f:
-                    raw_data = f.read()
-                    data_tmp = np.frombuffer(raw_data, dtype=np.float64)
-                    data_tmp = data_tmp.reshape(-1, 3)
-                data.append(data_tmp)
-        elif mod == 'mmwave':
-            for bin_file in sorted(glob.glob(os.path.join(dir, "frame*.bin"))):
-                with open(bin_file, 'rb') as f:
-                    raw_data = f.read()
-                    data_tmp = np.frombuffer(raw_data, dtype=np.float64)
-                    data_tmp = data_tmp.copy().reshape(-1, 5)
-                    # data_tmp = data_tmp[:, :3]
-                data.append(data_tmp)
-        elif mod == 'wifi-csi':
-            for csi_mat in sorted(glob.glob(os.path.join(dir, "frame*.mat"))):
-                data_amp = scio.loadmat(csi_mat)['CSIamp']
-                data_pha = scio.loadmat(csi_mat)['CSIphase']
-                data_frame = np.vectorize(complex)(data_amp, data_pha)
-                data_frame = self._interpolate_nan_inf(data_frame)
-                data.append(data_frame)
-            data = np.array(data)
-        elif mod == 'wifi-csi-amp':
-            for csi_mat in sorted(glob.glob(os.path.join(dir, "frame*.mat"))):
-                data_amp = scio.loadmat(csi_mat)['CSIamp']
-                data_amp = self._interpolate_nan_inf(data_amp)
-                data.append(data_amp)
-            data = np.array(data)
-        elif mod == 'wifi-csi-pha':
-            for csi_mat in sorted(glob.glob(os.path.join(dir, "frame*.mat"))):
-                data_pha = scio.loadmat(csi_mat)['CSIphase']
-                data_pha = self._interpolate_nan_inf(data_pha)
-                data.append(data_pha)
-            data = np.array(data)
-        else:
-            raise ValueError('Found unseen modality in this dataset.')
-        return data
-
-    def _interpolate_nan_inf(self, csi_frame:np.ndarray):
-        for i in range(10):  # 32
-            temp_col = csi_frame[:, :, i]
-            nan_num = np.count_nonzero(temp_col != temp_col)
-            if nan_num != 0:
-                temp_not_nan_col = temp_col[temp_col == temp_col]
-                temp_col[np.isnan(temp_col)] = temp_not_nan_col.mean()
-        return csi_frame
-
-    def read_frame(self, frame):
-        _mod, _frame = os.path.split(frame)
-        _, mod = os.path.split(_mod)
-        if mod in ['infra1', 'infra2', 'rgb']:
-            data = np.load(frame)
-        elif mod == 'depth':
-            data = cv2.imread(frame, cv2.IMREAD_UNCHANGED) * 0.001
-        elif mod == 'lidar':
-            with open(frame, 'rb') as f:
-                raw_data = f.read()
-                data = np.frombuffer(raw_data, dtype=np.float64)
-                data = data.reshape(-1, 3)
-        elif mod == 'mmwave':
-            with open(frame, 'rb') as f:
-                raw_data = f.read()
-                data = np.frombuffer(raw_data, dtype=np.float64)
-                data = data.copy().reshape(-1, 5)
-                # data = data[:, :3]
-        elif mod == 'wifi-csi':
-            data_amp = scio.loadmat(frame)['CSIamp']
-            data_pha = scio.loadmat(frame)['CSIphase']
-            data = np.vectorize(complex)(data_amp, data_pha)
-            data = self._interpolate_nan_inf(data)
-        elif mod == 'wifi-csi-amp':
-            data = scio.loadmat(frame)['CSIamp']
-            data = self._interpolate_nan_inf(data)
-        elif mod == 'wifi-csi-pha':
-            data = scio.loadmat(frame)['CSIphase']
-            data = self._interpolate_nan_inf(data)
-
-        else:
-            raise ValueError('Found unseen modality in this dataset.')
-        return data
-
-    def __len__(self):
-        return len(self.data_list)
 
     def __getitem__(self, idx):
         item = self.data_list[idx]
 
         gt_numpy = np.load(item['gt_path'])
         gt_torch = torch.from_numpy(gt_numpy)
+        sample = {'modalities': item['modalities'],
+                    'scene': item['scene'],
+                    'subject': item['subject'],
+                    'action': item['action'],
+                    'idx': item['idx'],
+                    'output': gt_torch[item['idx']]
+                    }
+        for mod in self.modalities:
+            data_path = item[mod.name + '_path']
+            if os.path.isfile(data_path):
+                data_mod = mod.read_frame(data_path)
+                sample[mod.name] = data_mod
+            else:
+                raise ValueError('{} is not a file!'.format(data_path))
 
-        if self.data_unit == 'sequence':
-            sample = {'modality': item['modality'],
-                      'scene': item['scene'],
-                      'subject': item['subject'],
-                      'action': item['action'],
-                      'output': gt_torch
-                      }
-            for mod in item['modality']:
-                data_path = item[mod+'_path']
-                if os.path.isdir(data_path):
-                    data_mod = self.read_dir(data_path)
-                else:
-                    data_mod = np.load(data_path + '.npy')
-                sample['input_'+mod] = data_mod
-        elif self.data_unit == 'frame':
-            sample = {'modality': item['modality'],
-                      'scene': item['scene'],
-                      'subject': item['subject'],
-                      'action': item['action'],
-                      'idx': item['idx'],
-                      'output': gt_torch[item['idx']]
-                      }
-            for mod in item['modality']:
-                data_path = item[mod + '_path']
-                if os.path.isfile(data_path):
-                    data_mod = self.read_frame(data_path)
-                    sample['input_'+mod] = data_mod
-                else:
-                    raise ValueError('{} is not a file!'.format(data_path))
-        else:
-            raise ValueError('Unsupport data unit!')
         return sample
+
+
+class MMFI_DatasetSequence(MMFi_Dataset):
+    def load_data(self):
+        data_info = []
+        for subject, actions in self.data_source.items():
+            for action in actions:
+                data_dict = {'modalities': [m.name for m in self.modalities],
+                                'scene': self.get_scene(subject),
+                                'subject': subject,
+                                'action': action,
+                                'gt_path': os.path.join(self.data_base.data_root, self.get_scene(subject), subject,
+                                                        action, 'ground_truth.npy')
+                                }
+                for mod in self.modalities:
+                    data_dict[mod.name+'_path'] = os.path.join(self.data_base.data_root, self.get_scene(subject), subject,
+                                                        action, mod.name)
+                data_info.append(data_dict)
+
+        return data_info
+
+    def __getitem__(self, idx):
+        item = self.data_list[idx]
+        gt_numpy = np.load(item['gt_path'])
+        gt_torch = torch.from_numpy(gt_numpy)
+        sample = {'modalities': item['modalities'],
+                    'scene': item['scene'],
+                    'subject': item['subject'],
+                    'action': item['action'],
+                    'output': gt_torch
+                    }
+        for mod in self.modalities:
+            data_path = item[mod.name+'_path']
+            if os.path.isdir(data_path):
+                data_mod = mod.read_dir(data_path)
+            else:
+                data_mod = np.load(data_path + '.npy')
+            sample[mod.name] = data_mod
+
+        return sample
+
 
 
 def make_dataset(dataset_root, config):
     database = MMFi_Database(dataset_root)
     config_dataset = decode_config(config)
-    train_dataset = MMFi_Dataset(database, config['data_unit'], **config_dataset['train_dataset'])
-    val_dataset = MMFi_Dataset(database, config['data_unit'], **config_dataset['val_dataset'])
+    if config["data_unit"]== "frame":
+        train_dataset = MMFI_DatasetFrame(database, **config_dataset['train_dataset'])
+        val_dataset = MMFI_DatasetFrame(database, **config_dataset['val_dataset'])
+    elif config["data_unit"]== "sequence":
+        train_dataset = MMFI_DatasetSequence(database, **config_dataset['train_dataset'])
+        val_dataset = MMFI_DatasetSequence(database, **config_dataset['val_dataset'])
+    else:
+        raise ValueError("invalid data_unit")
+
     return train_dataset, val_dataset
 
 
@@ -362,7 +349,7 @@ def collate_fn_padd(batch):
     Padds batch of variable length
     '''
 
-    batch_data = {'modality': batch[0]['modality'],
+    batch_data = {'modalities': batch[0]['modalities'],
                   'scene': [sample['scene'] for sample in batch],
                   'subject': [sample['subject'] for sample in batch],
                   'action': [sample['action'] for sample in batch],
@@ -372,16 +359,17 @@ def collate_fn_padd(batch):
     _output = torch.FloatTensor(np.array(_output))
     batch_data['output'] = _output
 
-    for mod in batch_data['modality']:
-        if mod in ['mmwave', 'lidar']:
-            _input = [torch.Tensor(sample['input_' + mod]) for sample in batch]
+    for mod in batch_data['modalities']:
+        mod = MODALITY_MAP[mod]
+        if mod.name in ['mmwave', 'lidar']:
+            _input = [torch.Tensor(sample[mod.name]) for sample in batch]
             _input = torch.nn.utils.rnn.pad_sequence(_input)
             _input = _input.permute(1, 0, 2)
-            batch_data['input_' + mod] = _input
+            batch_data[mod] = _input
         else:
-            _input = [np.array(sample['input_' + mod]) for sample in batch]
+            _input = [np.array(sample[mod.name]) for sample in batch]
             _input = torch.FloatTensor(np.array(_input))
-            batch_data['input_' + mod] = _input
+            batch_data[mod.name] = _input
 
     return batch_data
 
