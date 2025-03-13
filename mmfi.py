@@ -166,9 +166,6 @@ class MMFI_DatasetFrame(MMFi_Dataset):
                     data_valid = True
                     for mod in self.modalities:
                         data_dict[mod.name+'_path'] = os.path.join(self.data_base.data_root, self.get_scene(subject), subject, action, mod.name, "frame{:03d}".format(idx+1) + mod.file_ending)
-
-                        if os.path.getsize(data_dict[mod.name+'_path']) == 0:
-                            data_valid = False
                     if data_valid:
                         data_info.append(data_dict)
         return data_info
@@ -187,11 +184,8 @@ class MMFI_DatasetFrame(MMFi_Dataset):
                     }
         for mod in self.modalities:
             data_path = item[mod.name + '_path']
-            if os.path.isfile(data_path):
-                data_mod = mod.read_frame(data_path)
-                sample[mod.name] = data_mod
-            else:
-                raise ValueError('{} is not a file!'.format(data_path))
+            data_mod = mod.read_frame(data_path)
+            sample[mod.name] = data_mod
 
         return sample
 
@@ -227,15 +221,11 @@ class MMFI_DatasetSequence(MMFi_Dataset):
                     }
         for mod in self.modalities:
             data_path = item[mod.name+'_path']
-            if os.path.isdir(data_path):
-                data_mod = mod.read_dir(data_path)
-            else:
-                data_mod = np.load(data_path + '.npy')
+            data_mod = mod.read_dir(data_path)
+
             sample[mod.name] = data_mod
 
         return sample
-
-
 
 def make_dataset(dataset_root, config):
     database = MMFi_Database(dataset_root)
