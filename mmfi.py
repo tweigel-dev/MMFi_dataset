@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+from typing import TypedDict
 import scipy.io as scio
 import glob
 import cv2
@@ -6,6 +8,23 @@ import torch
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 
+
+
+
+
+
+
+modalitys:dict[str:str] = {
+    'rgb': ".npy",
+    'infra1': ".npy",
+    'infra2': ".npy",
+    'depth': ".png",
+    'lidar': ".bin",
+    'mmwave': ".bin",
+    'wifi-csi': ".mat",
+    'wifi-csi-amp': ".mat",
+    'wifi-csi-pha': ".mat",
+}
 
 def decode_config(config):
     all_subjects = ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07', 'S08', 'S09', 'S10', 'S11', 'S12', 'S13', 'S14',
@@ -113,7 +132,7 @@ class MMFi_Database:
                         self.actions[action][scene] = {}
                     if subject not in self.actions[action][scene].keys():
                         self.actions[action][scene][subject] = {}
-                    for modality in ['infra1', 'infra2', 'depth', 'rgb', 'lidar', 'mmwave', 'wifi-csi','wifi-csi-amp','wifi-csi-pha']:
+                    for modality in modalitys.keys():
                         data_path = os.path.join(self.data_root, scene, subject, action, modality)
                         self.scenes[scene][subject][action][modality] = data_path
                         self.subjects[subject][action][modality] = data_path
@@ -134,7 +153,7 @@ class MMFi_Dataset(Dataset):
         self.data_unit = data_unit
         self.modality = modality.split('|')
         for m in self.modality:
-            assert m in ['rgb', 'infra1', 'infra2', 'depth', 'lidar', 'mmwave', 'wifi-csi','wifi-csi-amp','wifi-csi-pha']
+            assert m in modalitys.keys()
         self.split = split
         self.data_source = data_form
         self.data_list = self.load_data()
@@ -151,17 +170,6 @@ class MMFi_Dataset(Dataset):
         else:
             raise ValueError('Subject does not exist in this dataset.')
 
-    def get_data_type(self, mod):
-        if mod in ["rgb", 'infra1', "infra2"]:
-            return ".npy"
-        elif mod in ["lidar", "mmwave"]:
-            return ".bin"
-        elif mod in ["depth"]:
-            return ".png"
-        elif mod in ["wifi-csi", "wifi-csi-amp", "wifi-csi-pha"]:
-            return ".mat"
-        else:
-            raise ValueError("Unsupported modality.")
 
     def load_data(self):
         data_info = []
@@ -192,7 +200,7 @@ class MMFi_Dataset(Dataset):
                                      }
                         data_valid = True
                         for mod in self.modality:
-                            data_dict[mod+'_path'] = os.path.join(self.data_base.data_root, self.get_scene(subject), subject, action, mod, "frame{:03d}".format(idx+1) + self.get_data_type(mod))
+                            data_dict[mod+'_path'] = os.path.join(self.data_base.data_root, self.get_scene(subject), subject, action, mod, "frame{:03d}".format(idx+1) + modalitys[mod])
 
                             if os.path.getsize(data_dict[mod+'_path']) == 0:
                                 data_valid = False
@@ -286,13 +294,13 @@ class MMFi_Dataset(Dataset):
             data_amp = scio.loadmat(frame)['CSIamp']
             data_pha = scio.loadmat(frame)['CSIphase']
             data = np.vectorize(complex)(data_amp, data_pha)
-            data = self._interpolate_nan_inf(data) 
+            data = self._interpolate_nan_inf(data)
         elif mod == 'wifi-csi-amp':
             data = scio.loadmat(frame)['CSIamp']
-            data = self._interpolate_nan_inf(data) 
+            data = self._interpolate_nan_inf(data)
         elif mod == 'wifi-csi-pha':
             data = scio.loadmat(frame)['CSIphase']
-            data = self._interpolate_nan_inf(data) 
+            data = self._interpolate_nan_inf(data)
 
         else:
             raise ValueError('Found unseen modality in this dataset.')
