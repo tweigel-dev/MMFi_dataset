@@ -94,6 +94,8 @@ class MMFi_Database:
         for scene in sorted(os.listdir(self.data_root)):
             if scene.startswith("."):
                 continue
+            if os.path.isfile( os.path.join(self.data_root, scene)):
+                continue
             self.scenes[scene] = {}
             for subject in sorted(os.listdir(os.path.join(self.data_root, scene))):
                 if subject.startswith("."):
@@ -111,7 +113,7 @@ class MMFi_Database:
                         self.actions[action][scene] = {}
                     if subject not in self.actions[action][scene].keys():
                         self.actions[action][scene][subject] = {}
-                    for modality in ['infra1', 'infra2', 'depth', 'rgb', 'lidar', 'mmwave', 'wifi-csi']:
+                    for modality in ['infra1', 'infra2', 'depth', 'rgb', 'lidar', 'mmwave', 'wifi-csi','wifi-csi-amp','wifi-csi-pha']:
                         data_path = os.path.join(self.data_root, scene, subject, action, modality)
                         self.scenes[scene][subject][action][modality] = data_path
                         self.subjects[subject][action][modality] = data_path
@@ -132,7 +134,7 @@ class MMFi_Dataset(Dataset):
         self.data_unit = data_unit
         self.modality = modality.split('|')
         for m in self.modality:
-            assert m in ['rgb', 'infra1', 'infra2', 'depth', 'lidar', 'mmwave', 'wifi-csi']
+            assert m in ['rgb', 'infra1', 'infra2', 'depth', 'lidar', 'mmwave', 'wifi-csi','wifi-csi-amp','wifi-csi-pha']
         self.split = split
         self.data_source = data_form
         self.data_list = self.load_data()
@@ -156,7 +158,7 @@ class MMFi_Dataset(Dataset):
             return ".bin"
         elif mod in ["depth"]:
             return ".png"
-        elif mod in ["wifi-csi"]:
+        elif mod in ["wifi-csi", "wifi-csi-amp", "wifi-csi-pha"]:
             return ".mat"
         else:
             raise ValueError("Unsupported modality.")
@@ -232,15 +234,35 @@ class MMFi_Dataset(Dataset):
         elif mod == 'wifi-csi':
             for csi_mat in sorted(glob.glob(os.path.join(dir, "frame*.mat"))):
                 data_amp = scio.loadmat(csi_mat)['CSIamp']
-                data_amp[np.isinf(data_amp)] = np.nan
                 data_pha = scio.loadmat(csi_mat)['CSIphase']
-                data_pha[np.isinf(data_pha)] = np.nan
-                data_com = np.vectorize(complex)(data_amp, data_pha)
-                data.append(data_com)
+                data_frame = np.vectorize(complex)(data_amp, data_pha)
+                data_frame = self._interpolate_nan_inf(data_frame)
+                data.append(data_frame)
+            data = np.array(data)
+        elif mod == 'wifi-csi-amp':
+            for csi_mat in sorted(glob.glob(os.path.join(dir, "frame*.mat"))):
+                data_amp = scio.loadmat(csi_mat)['CSIamp']
+                data_amp = self._interpolate_nan_inf(data_amp)
+                data.append(data_amp)
+            data = np.array(data)
+        elif mod == 'wifi-csi-pha':
+            for csi_mat in sorted(glob.glob(os.path.join(dir, "frame*.mat"))):
+                data_pha = scio.loadmat(csi_mat)['CSIphase']
+                data_pha = self._interpolate_nan_inf(data_pha)
+                data.append(data_pha)
             data = np.array(data)
         else:
             raise ValueError('Found unseen modality in this dataset.')
         return data
+
+    def _interpolate_nan_inf(self, csi_frame:np.ndarray):
+        for i in range(10):  # 32
+            temp_col = csi_frame[:, :, i]
+            nan_num = np.count_nonzero(temp_col != temp_col)
+            if nan_num != 0:
+                temp_not_nan_col = temp_col[temp_col == temp_col]
+                temp_col[np.isnan(temp_col)] = temp_not_nan_col.mean()
+        return csi_frame
 
     def read_frame(self, frame):
         _mod, _frame = os.path.split(frame)
@@ -262,10 +284,16 @@ class MMFi_Dataset(Dataset):
                 # data = data[:, :3]
         elif mod == 'wifi-csi':
             data_amp = scio.loadmat(frame)['CSIamp']
-            data_amp[np.isinf(data_amp)] = np.nan
             data_pha = scio.loadmat(frame)['CSIphase']
-            data_pha[np.isinf(data_pha)] = np.nan
             data = np.vectorize(complex)(data_amp, data_pha)
+            data = self._interpolate_nan_inf(data)
+        elif mod == 'wifi-csi-amp':
+            data = scio.loadmat(frame)['CSIamp']
+            data = self._interpolate_nan_inf(data)
+        elif mod == 'wifi-csi-pha':
+            data = scio.loadmat(frame)['CSIphase']
+            data = self._interpolate_nan_inf(data)
+
         else:
             raise ValueError('Found unseen modality in this dataset.')
         return data
