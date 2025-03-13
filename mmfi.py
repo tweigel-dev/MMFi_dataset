@@ -185,6 +185,7 @@ class MMFI_DatasetFrame(MMFi_Dataset):
         for mod in self.modalities:
             data_path = item[mod.name + '_path']
             data_mod = mod.read_frame(data_path)
+            sample[mod.name+'_path'] = item[mod.name+'_path']
             sample[mod.name] = data_mod
 
         return sample
@@ -222,7 +223,7 @@ class MMFI_DatasetSequence(MMFi_Dataset):
         for mod in self.modalities:
             data_path = item[mod.name+'_path']
             data_mod = mod.read_dir(data_path)
-
+            sample[mod.name+'_path'] = item[mod.name+'_path']
             sample[mod.name] = data_mod
 
         return sample

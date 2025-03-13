@@ -18,7 +18,7 @@ class Modality:
         raise NotImplementedError()
     def read_dir(self, path: str | Path):
         if os.path.isdir(path):
-            return np.array([self.read_frame(f) for f in sorted(glob.glob(os.path.join(path, f"frame_path*{self.file_ending}")))])
+            return np.array([self.read_frame(f) for f in sorted(glob.glob(os.path.join(path, f"frame*{self.file_ending}")))])
         raise ValueError(f"Path {path} is not a dir")
     def read_frame(self, frame_path: str | Path):
         raise NotImplementedError()
