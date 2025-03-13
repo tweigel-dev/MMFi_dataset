@@ -88,14 +88,14 @@ class WifiCSIPhaseModality(WifiCSIModality):
         return self._interpolate_nan_inf(data_pha)
 
 MODALITY_MAP:dict[str,Modality] = {
-    'infra1': KeypointModality('infra1', '.npy'),
-    'infra2': KeypointModality('infra2', '.npy'),
-    'rgb': KeypointModality('rgb', '.npy'),
-    'depth': DepthModality('depth', '.png'),
-    'image': ImageModality('rgb', '.png'),
-    'lidar': LidarModality('lidar', '.bin'),
-    'mmwave': MmwaveModality('mmwave', '.bin'),
-    'wifi-csi': WifiCSIModality('wifi-csi', '.mat'),
-    'wifi-csi-amp': WifiCSIAmplitudeModality('wifi-csi-amp', '.mat'),
-    'wifi-csi-pha': WifiCSIPhaseModality('wifi-csi-pha', '.mat')
+    'infra1': KeypointModality('infra1'),
+    'infra2': KeypointModality('infra2'),
+    'rgb': KeypointModality('rgb'),
+    'depth': DepthModality('depth'),
+    'image': ImageModality('rgb'),
+    'lidar': LidarModality('lidar'),
+    'mmwave': MmwaveModality('mmwave'),
+    'wifi-csi': WifiCSIModality('wifi-csi'),
+    'wifi-csi-amp': WifiCSIAmplitudeModality('wifi-csi-amp'),
+    'wifi-csi-pha': WifiCSIPhaseModality('wifi-csi-pha')
 }
