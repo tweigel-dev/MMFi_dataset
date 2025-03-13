@@ -6,103 +6,11 @@ import glob
 import cv2
 import torch
 import numpy as np
+
 from torch.utils.data import Dataset, DataLoader
 
+from .modality import *
 
-
-
-
-class Modality:
-    def __init__(self, name: str, file_ending: str) -> None:
-        self.name = name
-        self.file_ending = file_ending
-
-    def read_dir(self, path: str | Path):
-        raise NotImplementedError()
-
-    def read_frame(self, frame: str | Path):
-        raise NotImplementedError()
-    def __str__(self) -> str:
-        return self.name
-class KeypointModality(Modality):
-    def read_dir(self, path: str | Path):
-        return np.array([np.load(f) for f in sorted(glob.glob(os.path.join(path, "frame*.npy")))])
-
-    def read_frame(self, frame: str | Path):
-        return np.load(frame)
-
-class DepthModality(Modality):
-    def read_dir(self, path: str | Path):
-        return np.array([cv2.imread(f, cv2.IMREAD_UNCHANGED) * 0.001 for f in sorted(glob.glob(os.path.join(path, "frame*.png")))])
-
-    def read_frame(self, frame: str | Path):
-        return cv2.imread(frame, cv2.IMREAD_UNCHANGED) * 0.001
-
-class LidarModality(Modality):
-    def read_dir(self, path: str | Path):
-        return [self._read_bin(f) for f in sorted(glob.glob(os.path.join(path, "frame*.bin")))]
-
-    def read_frame(self, frame: str | Path):
-        return self._read_bin(frame)
-
-    def _read_bin(self, file: str | Path):
-        with open(file, 'rb') as f:
-            data = np.frombuffer(f.read(), dtype=np.float64)
-            return data.reshape(-1, 3)
-
-class MmwaveModality(Modality):
-    def read_dir(self, path: str | Path):
-        return [self._read_bin(f) for f in sorted(glob.glob(os.path.join(path, "frame*.bin")))]
-
-    def read_frame(self, frame: str | Path):
-        return self._read_bin(frame)
-
-    def _read_bin(self, file: str | Path):
-        with open(file, 'rb') as f:
-            data = np.frombuffer(f.read(), dtype=np.float64)
-            return data.copy().reshape(-1, 5)
-
-class WifiCSIModality(Modality):
-    def read_dir(self, path: str | Path):
-        return np.array([self._process_mat(f) for f in sorted(glob.glob(os.path.join(path, "frame*.mat")))])
-
-    def read_frame(self, frame: str | Path):
-        return self._process_mat(frame)
-
-    def _process_mat(self, file: str | Path):
-        data_amp = scio.loadmat(file)['CSIamp']
-        data_pha = scio.loadmat(file)['CSIphase']
-        data = np.vectorize(complex)(data_amp, data_pha)
-        return self._interpolate_nan_inf(data)
-
-    def _interpolate_nan_inf(self, csi_frame: np.ndarray):
-        for i in range(10):
-            temp_col = csi_frame[:, :, i]
-            if np.isnan(temp_col).any():
-                temp_col[np.isnan(temp_col)] = np.nanmean(temp_col)
-        return csi_frame
-
-class WifiCSIAmplitudeModality(WifiCSIModality):
-    def _process_mat(self, file: str | Path):
-        data_amp = scio.loadmat(file)['CSIamp']
-        return self._interpolate_nan_inf(data_amp)
-
-class WifiCSIPhaseModality(WifiCSIModality):
-    def _process_mat(self, file: str | Path):
-        data_pha = scio.loadmat(file)['CSIphase']
-        return self._interpolate_nan_inf(data_pha)
-
-MODALITY_MAP:dict[str,Modality] = {
-    'infra1': KeypointModality('infra1', '.npy'),
-    'infra2': KeypointModality('infra2', '.npy'),
-    'rgb': KeypointModality('rgb', '.npy'),
-    'depth': DepthModality('depth', '.png'),
-    'lidar': LidarModality('lidar', '.bin'),
-    'mmwave': MmwaveModality('mmwave', '.bin'),
-    'wifi-csi': WifiCSIModality('wifi-csi', '.mat'),
-    'wifi-csi-amp': WifiCSIAmplitudeModality('wifi-csi-amp', '.mat'),
-    'wifi-csi-pha': WifiCSIPhaseModality('wifi-csi-pha', '.mat')
-}
 
 def decode_config(config):
     all_subjects = ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07', 'S08', 'S09', 'S10', 'S11', 'S12', 'S13', 'S14',
