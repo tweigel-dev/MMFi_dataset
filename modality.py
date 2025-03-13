@@ -7,6 +7,7 @@ import glob
 import cv2
 import numpy as np
 from torchvision.io import read_image
+import torch
 
 
 
@@ -64,6 +65,11 @@ class MmwaveModality(Modality):
             data = np.frombuffer(f.read(), dtype=np.float64)
         return data.copy().reshape(-1, 5)
 
+
+class FlowModality(Modality):
+    file_ending=".pt"
+    def read_frame(self, frame_path: str | Path):
+        return torch.load(frame_path)
 
 
 class WifiCSIModality(Modality):

@@ -66,7 +66,7 @@ def decode_config(config):
             train_form[subject] = actions
         for subject in subjects_val:
             val_form[subject] = actions
-    else:
+    elif config['split_to_use'] == 'manual_split':
         subjects_train = config['manual_split']['train_dataset']['subjects']
         subjects_val = config['manual_split']['val_dataset']['subjects']
         actions_train = config['manual_split']['train_dataset']['actions']
@@ -76,6 +76,8 @@ def decode_config(config):
         for subject in subjects_val:
             val_form[subject] = actions_val
 
+    else:
+        raise Exception("no split mechanique specified")
     dataset_config = {'train_dataset': {'modalities': config['modalities'],
                                         'split': 'training',
                                         'data_form': train_form
@@ -259,6 +261,7 @@ def collate_fn_padd(batch):
     batch_data['output'] = _output
 
     for mod in batch_data['modalities']:
+        batch_data[mod+"_path"] = [sample[mod+"_path"] for sample in batch],
         mod = MODALITY_MAP[mod]
         if mod.name in ['mmwave', 'lidar']:
             _input = [torch.Tensor(sample[mod.name]) for sample in batch]
