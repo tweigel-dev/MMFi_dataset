@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 from torchvision.io import read_image
 import torch
+from torch import Tensor
 
 
 
@@ -69,7 +70,7 @@ class MmwaveModality(Modality):
 class FlowModality(Modality):
     file_ending=".pt"
     def read_frame(self, frame_path: str | Path):
-        return torch.load(frame_path)
+        return torch.load(frame_path).to(torch.float16)
 
 
 class WifiCSIModality(Modality):
@@ -77,26 +78,26 @@ class WifiCSIModality(Modality):
     def read_frame(self, frame_path: str | Path):
         data_amp = scio.loadmat(frame_path)['CSIamp']
         data_pha = scio.loadmat(frame_path)['CSIphase']
-        data = np.vectorize(complex)(data_amp, data_pha)
+        data = torch.complex(Tensor(data_amp),Tensor(data_pha))
         return self._interpolate_nan_inf(data)
 
 
     def _interpolate_nan_inf(self, csi_frame_path: np.ndarray):
         for i in range(10):
             temp_col = csi_frame_path[:, :, i]
-            if np.isnan(temp_col).any():
-                temp_col[np.isnan(temp_col)] = np.nanmean(temp_col)
+            if temp_col.isnan().any():
+                temp_col[temp_col.isnan()] = temp_col.mean()
         return csi_frame_path
 
 class WifiCSIAmplitudeModality(WifiCSIModality):
     def read_frame(self, frame_path: str | Path):
         data_amp = scio.loadmat(frame_path)['CSIamp']
-        return self._interpolate_nan_inf(data_amp)
+        return self._interpolate_nan_inf(Tensor(data_amp))
 
 class WifiCSIPhaseModality(WifiCSIModality):
     def read_frame(self, frame_path: str | Path):
         data_pha = scio.loadmat(frame_path)['CSIphase']
-        return self._interpolate_nan_inf(data_pha)
+        return self._interpolate_nan_inf(Tensor(data_pha))
 
 MODALITY_MAP:dict[str,Modality] = {
     'infra1': KeypointModality('infra1'),
@@ -108,5 +109,6 @@ MODALITY_MAP:dict[str,Modality] = {
     'mmwave': MmwaveModality('mmwave'),
     'wifi-csi': WifiCSIModality('wifi-csi'),
     'wifi-csi-amp': WifiCSIAmplitudeModality('wifi-csi-amp'),
-    'wifi-csi-pha': WifiCSIPhaseModality('wifi-csi-pha')
+    'wifi-csi-pha': WifiCSIPhaseModality('wifi-csi-pha'),
+    'flow': FlowModality('flow')
 }
