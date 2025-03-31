@@ -87,7 +87,7 @@ class WifiCSIModality(Modality):
             temp_col = csi_frame_path[:, :, i]
             if temp_col.isnan().any() or temp_col.isinf().any():
                 findings = temp_col.isnan() or temp_col.isinf() 
-                temp_col[findings] = temp_col[findings].mean()
+                temp_col[findings] = temp_col[not findings].mean()
         return csi_frame_path
 
 class WifiCSIAmplitudeModality(WifiCSIModality):
