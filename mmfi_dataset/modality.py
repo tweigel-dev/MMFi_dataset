@@ -85,10 +85,9 @@ class WifiCSIModality(Modality):
     def _interpolate_nan_inf(self, csi_frame_path: np.ndarray):
         for i in range(10):
             temp_col = csi_frame_path[:, :, i]
-            if temp_col.isnan().any():
-                temp_col[temp_col.isnan()] = temp_col.mean()
-            if temp_col.isinf().any():
-                temp_col[temp_col.isinf()] = temp_col.mean()
+            if temp_col.isnan().any() or temp_col.isinf().any():
+                findings = temp_col.isnan() or temp_col.isinf() 
+                temp_col[findings] = temp_col[findings].mean()
         return csi_frame_path
 
 class WifiCSIAmplitudeModality(WifiCSIModality):
