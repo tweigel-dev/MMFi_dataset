@@ -60,11 +60,14 @@ def decode_config(config):
         for subject in subjects_val:
             val_form[subject] = actions
     elif config['split_to_use'] == 'cross_subject_split':
+        
         subjects_train = config['cross_subject_split']['train_dataset']['subjects']
         subjects_val = config['cross_subject_split']['val_dataset']['subjects']
         for subject in subjects_train:
+            actions=config["cross_subject_split"]["train_dataset"]["actions"] if config["cross_subject_split"]["train_dataset"]["actions"] else all_actions
             train_form[subject] = actions
         for subject in subjects_val:
+            actions=config["cross_subject_split"]["train_dataset"]["actions"] if config["cross_subject_split"]["train_dataset"]["actions"] else all_actions
             val_form[subject] = actions
     elif config['split_to_use'] == 'manual_split':
         subjects_train = config['manual_split']['train_dataset']['subjects']
@@ -282,7 +285,7 @@ def make_dataloader(dataset, is_training, generator, batch_size, collate_fn_padd
         collate_fn=collate_fn_padd,
         shuffle=is_training,
         drop_last=is_training,
-        generator=generator
+        generator=generator,
     )
     return loader
 
