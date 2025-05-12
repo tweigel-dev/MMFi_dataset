@@ -67,40 +67,11 @@ ${DATASET_ROOT}
 
 ### Step 3
 
-Edit your code and configuration file (_**.yaml**_ file) carefully before running. For details of the configuration, please check the [keys description](#keys_description).&#x20;
+Edit your code and configuration object before running. For details of the configuration, please check the [keys description](#keys_description).&#x20;
 
 Here we just take the code snippets in the _**example.py**_ for instance.&#x20;
 
-```
-import yaml
-import numpy as np
-import torch
 
-# Please add the downloaded mmfi directory into your python project. 
-from mmfi import make_dataset, make_dataloader
-
-dataset_root = '/data3/MMFi_Dataset'  # path will not be same in your server.
-with open('config.yaml', 'r') as fd:  # change the .yaml file in your code.
-    config = yaml.load(fd, Loader=yaml.FullLoader)
-
-train_dataset, val_dataset = make_dataset(dataset_root, config)
-rng_generator = torch.manual_seed(config['init_rand_seed'])
-train_loader = make_dataloader(train_dataset, is_training=True, generator=rng_generator, **config['train_loader'])
-val_loader = make_dataloader(val_dataset, is_training=False, generator=rng_generator, **config['validation_loader'])
-
-# Coding
-
-```
-
-### Step 4
-
-Now you can start the implementation. For example, using the commands below:&#x20;
-
-```
-cd your_project_dir
-// make coding
-python your_script_name.py path_to_dataset_dir your_config.yaml
-```
 
 ## <span id=keys_description>Description of Keys in Configuration</span>
 
@@ -138,16 +109,7 @@ This key defines how many [activities](#activity_list) could be enabled in your 
 * **protocol 2:** Only the rehabilitation activities are enabled.
 * **protocol 3:** All activities are enabled.
 
-<mark style="color:green;">**`split`**</mark>
 
-The train/test split of your code. There are already 3 splits which are used in our paper.&#x20;
-
-* **manual\_split:** Please refer to the example in .yaml file and _**customize your own dataset split**_ setting here (which subjects and actions are regarded as the testing data).&#x20;
-* **split\_to\_use:** Specify the split you want. &#x20;
-
-<mark style="color:green;">**`train_loader`**</mark>    <mark style="color:green;">**`validation_loader`**</mark>
-
-These two options define the parameters which are used to construct your dataloaders. We keep these two options open so that you could customize freely.&#x20;
 
 ## More Details about MMFi Dataset
 
