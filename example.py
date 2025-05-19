@@ -1,6 +1,6 @@
 
 from pathlib import Path
-
+import yaml
 import torch
 from torch.utils.data import DataLoader
 from mmfi_dataset.mmfi import  collate_fn_padd
@@ -8,9 +8,8 @@ from mmfi_dataset.mmfi import MMFi_Database, MMFI_DatasetFrame, MMFI_DatasetSequ
 from mmfi_dataset.decode_config import MMFIConfig,DatasetFragment
 
 if __name__ == '__main__':
-
-    dataset_root = Path("./dataset/mmfi")
     dataset_config = MMFIConfig(
+        dataset_root="./dataset/mmfi",
         modalities=["wifi-csi","rgb"],
         train=DatasetFragment(
             environments=["EO1"],
@@ -23,7 +22,7 @@ if __name__ == '__main__':
             actions= ["A22", "A23", "A24", "A25", "A26", "A27"]
         )
     )
-    database = MMFi_Database(dataset_root)
+    database = MMFi_Database(dataset_config.dataset_root)
     train_dataset = MMFI_DatasetFrame(database,dataset_config.modalities,dataset_config.train) 
     val_dataset,  = MMFI_DatasetFrame(database,dataset_config.modalities,dataset_config.train) 
     rng_generator = torch.manual_seed(dataset_config.seed)
@@ -43,12 +42,9 @@ if __name__ == '__main__':
         drop_last=False,
         generator=rng_generator,
     )
-    # Just an example for illustration.
+    #Just an example for illustration.
     for batch_idx, batch_data in enumerate(train_loader):
         # Please check the data structure here.
         print(batch_data['output'])
-
-
-
-
-
+    with open("mmfi_config.yaml", "w") as file:
+        yaml.dump(dataset_config.model_dump(),file,default_flow_style=None)

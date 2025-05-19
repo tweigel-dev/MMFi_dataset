@@ -1,5 +1,6 @@
 
 
+from pathlib import Path
 from typing import Optional
 import numpy
 from pydantic import BaseModel, field_validator, model_validator
@@ -41,6 +42,7 @@ class EmptyFragment(DatasetFragment):
 
 class MMFIConfig(BaseModel):
     modalities : list[str]
+    dataset_root: Optional[str] = None
     train : DatasetFragment
     validation: DatasetFragment
     test: Optional[DatasetFragment]  = EmptyFragment()
@@ -55,8 +57,17 @@ class MMFIConfig(BaseModel):
             intersection = train_tree & validation_tree | train_tree & test_tree | validation_tree & test_tree
             raise ValueError(f'in this config is an invalid intersection {intersection}')
 
-    @field_validator('modalities', mode='after')
+    @field_validator('modalities')
     @classmethod
     def _validate_modalities(cls, modalities):
         if not all(m in MODALITY_MAP for m in modalities):
             raise ValueError(f'unknown modality {set(modalities)-(set(MODALITY_MAP.keys()))}')
+        return modalities
+
+    @field_validator('dataset_root')
+    @classmethod
+    def _validate_modalities(cls, dataset_root:str):
+        path = Path(dataset_root)
+        if not path.is_dir():
+            raise ValueError(f'dataset_root is not a dir {dataset_root}')
+        return path
