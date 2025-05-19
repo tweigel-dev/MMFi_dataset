@@ -74,6 +74,8 @@ class MMFI_DatasetFrame(MMFi_Dataset):
     def load_data(self):
         data_info = []
         for relative_path in self.fragment.create_tree():
+            if not (self.database.data_root/relative_path).exists():
+                continue
             frame_num = 297
             for idx in range(frame_num):
                 data_dict = {'modalities': [m.name for m in self.modalities],
@@ -92,11 +94,7 @@ class MMFI_DatasetFrame(MMFi_Dataset):
         gt_numpy = np.load(item['gt_path'])
         gt_torch = torch.from_numpy(gt_numpy)
         sample = {'modalities': item['modalities'],
-                    'scene': item['scene'],
-                    'subject': item['subject'],
-                    'action': item['action'],
                     'idx': item['idx'],
-                    'output': gt_torch[item['idx']]
                     }
         for mod in self.modalities:
             data_path = item[mod.name + '_path']
@@ -122,12 +120,7 @@ class MMFI_DatasetSequence(MMFi_Dataset):
         item = self.data_list[idx]
         gt_numpy = np.load(item['gt_path'])
         gt_torch = torch.from_numpy(gt_numpy)
-        sample = {'modalities': item['modalities'],
-                    'scene': item['scene'],
-                    'subject': item['subject'],
-                    'action': item['action'],
-                    'output': gt_torch
-                    }
+        sample = {'modalities': item['modalities']}
         for mod in self.modalities:
             data_path = item[mod.name+'_path']
             data_mod = mod.read_dir(data_path)
@@ -144,17 +137,11 @@ def collate_fn_padd(batch):
     '''
 
     batch_data = {'modalities': batch[0]['modalities'],
-                  'scene': [sample['scene'] for sample in batch],
-                  'subject': [sample['subject'] for sample in batch],
-                  'action': [sample['action'] for sample in batch],
                   'idx': [sample['idx'] for sample in batch] if 'idx' in batch[0] else None
                   }
-    _output = [np.array(sample['output']) for sample in batch]
-    _output = torch.FloatTensor(np.array(_output))
-    batch_data['output'] = _output
 
     for mod in batch_data['modalities']:
-        batch_data[mod+"_path"] = [sample[mod+"_path"] for sample in batch],
+        batch_data[mod+"_path"] = [sample[mod+"_path"] for sample in batch if mod+"_path" in sample],
         mod = MODALITY_MAP[mod]
         if mod.name in ['mmwave', 'lidar']:
             _input = [torch.Tensor(sample[mod.name]) for sample in batch]
@@ -162,9 +149,9 @@ def collate_fn_padd(batch):
             _input = _input.permute(1, 0, 2)
             batch_data[mod] = _input
         else:
-            _input = [np.array(sample[mod.name]) for sample in batch]
-            _input = torch.FloatTensor(np.array(_input))
-            batch_data[mod.name] = _input
+            if not mod.name in  batch[0]:
+                continue
+            batch_data[mod.name] = torch.concat([sample[mod.name][None] for sample in batch if mod.name in sample])
 
     return batch_data
 

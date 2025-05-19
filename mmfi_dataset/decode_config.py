@@ -22,7 +22,7 @@ class DatasetFragment(BaseModel):
     environments: list[str] = _all_environments
     subjects: list[str] = _all_subjects
     actions: list[str] = _all_actions
-
+    batch_size:int = 1
     def create_tree(self)-> set[str]:
         result = []
         for env in self.environments:
@@ -48,7 +48,6 @@ class MMFIConfig(BaseModel):
     validation: DatasetFragment
     test: Optional[DatasetFragment]  = EmptyFragment()
     seed:int = numpy.random.randint(1,9999)
-    batch_size:int = 1
     @model_validator(mode='after')
     def _validate_no_overlapp(self):
         train_tree = self.train.create_tree()

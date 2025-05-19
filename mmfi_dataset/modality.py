@@ -70,7 +70,7 @@ class MmwaveModality(Modality):
 class FlowModality(Modality):
     file_ending=".pt"
     def read_frame(self, frame_path: str | Path):
-        return torch.load(frame_path).to(torch.float16)
+        return torch.load(frame_path,"cpu").to(torch.float16)
 
 
 class WifiCSIModality(Modality):
