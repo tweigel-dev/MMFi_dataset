@@ -80,3 +80,14 @@ def test_invalid_databaseroot():
             train=DatasetFragment(environments=["EO1"],subjects=["S01"], actions=["A01"]),
             validation=DatasetFragment(environments=["E01"],subjects=["S01"], actions=["A02"]))
         assert isinstance(config.dataset_root, Path)
+
+
+def test_export_import_yaml(tmp_path):
+    config = MMFIConfig(
+            dataset_root="mmfi_dataset",
+            modalities=["wifi-csi","flow"],
+            train=DatasetFragment(environments=["EO1"],subjects=["S01"], actions=["A01"]),
+            validation=DatasetFragment(environments=["E01"],subjects=["S01"], actions=["A02"]))
+    config.save(tmp_path/"config.yaml")
+    loaded = MMFIConfig.load(tmp_path/"config.yaml")
+    assert len(loaded.modalities) == 2

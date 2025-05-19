@@ -46,5 +46,5 @@ if __name__ == '__main__':
     for batch_idx, batch_data in enumerate(train_loader):
         # Please check the data structure here.
         print(batch_data['output'])
-    with open("mmfi_config.yaml", "w") as file:
-        yaml.dump(dataset_config.model_dump(),file,default_flow_style=None)
+    dataset_config.save("mmfi_config.yaml")
+

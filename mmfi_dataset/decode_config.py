@@ -3,7 +3,8 @@
 from pathlib import Path
 from typing import Optional
 import numpy
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, field_serializer, field_validator, model_validator
+import yaml
 from .modality import MODALITY_MAP
 _all_actions = ['A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A07', 'A08', 'A09', 'A10', 'A11', 'A12', 'A13', 'A14',
                 'A15', 'A16', 'A17', 'A18', 'A19', 'A20', 'A21', 'A22', 'A23', 'A24', 'A25', 'A26', 'A27']
@@ -71,3 +72,17 @@ class MMFIConfig(BaseModel):
         if not path.is_dir():
             raise ValueError(f'dataset_root is not a dir {dataset_root}')
         return path
+    @field_serializer("dataset_root")
+    def dataset_root_ser(self, dataset_root):
+        return str(dataset_root)
+
+    @classmethod
+    def load(cls, path:Path):
+        with open(path,"r") as file:
+            dict = yaml.safe_load(file)
+            config = MMFIConfig(**dict)
+        return config
+    
+    def save(self, path:Path):
+        with open(path, "w") as file:
+            yaml.dump(self.model_dump(),file,default_flow_style=None)
