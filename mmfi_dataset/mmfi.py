@@ -9,91 +9,15 @@ import numpy as np
 
 from torch.utils.data import Dataset, DataLoader
 
+from mmfi_dataset.decode_config import DatasetFragment
+
 from .modality import *
 
-
-def decode_config(config):
-    all_subjects = ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07', 'S08', 'S09', 'S10', 'S11', 'S12', 'S13', 'S14',
-                    'S15', 'S16', 'S17', 'S18', 'S19', 'S20', 'S21', 'S22', 'S23', 'S24', 'S25', 'S26', 'S27', 'S28',
-                    'S29', 'S30', 'S31', 'S32', 'S33', 'S34', 'S35', 'S36', 'S37', 'S38', 'S39', 'S40']
-    all_actions = ['A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A07', 'A08', 'A09', 'A10', 'A11', 'A12', 'A13', 'A14',
-                   'A15', 'A16', 'A17', 'A18', 'A19', 'A20', 'A21', 'A22', 'A23', 'A24', 'A25', 'A26', 'A27']
-    train_form = {}
-    val_form = {}
-    # Limitation to actions (protocol)
-    if config['protocol'] == 'protocol1':  # Daily actions
-        actions = ['A02', 'A03', 'A04', 'A05', 'A13', 'A14', 'A17', 'A18', 'A19', 'A20', 'A21', 'A22', 'A23', 'A27']
-    elif config['protocol'] == 'protocol2':  # Rehabilitation actions:
-        actions = ['A01', 'A06', 'A07', 'A08', 'A09', 'A10', 'A11', 'A12', 'A15', 'A16', 'A24', 'A25', 'A26']
-    else:
-        actions = all_actions
-    # Limitation to subjects and actions (split choices)
-    if config['split_to_use'] == 'random_split':
-        rs = config['random_split']['random_seed']
-        ratio = config['random_split']['ratio']
-        for action in actions:
-            np.random.seed(rs)
-            idx = np.random.permutation(len(all_subjects))
-            idx_train = idx[:int(np.floor(ratio*len(all_subjects)))]
-            idx_val = idx[int(np.floor(ratio*len(all_subjects))):]
-            subjects_train = np.array(all_subjects)[idx_train].tolist()
-            subjects_val = np.array(all_subjects)[idx_val].tolist()
-            for subject in all_subjects:
-                if subject in subjects_train:
-                    if subject in train_form:
-                        train_form[subject].append(action)
-                    else:
-                        train_form[subject] = [action]
-                if subject in subjects_val:
-                    if subject in val_form:
-                        val_form[subject].append(action)
-                    else:
-                        val_form[subject] = [action]
-            rs += 1
-    elif config['split_to_use'] == 'cross_scene_split':
-        subjects_train = ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07', 'S08', 'S09', 'S10',
-                          'S11', 'S12', 'S13', 'S14', 'S15', 'S16', 'S17', 'S18', 'S19', 'S20',
-                          'S21', 'S22', 'S23', 'S24', 'S25', 'S26', 'S27', 'S28', 'S29', 'S30']
-        subjects_val = ['S31', 'S32', 'S33', 'S34', 'S35', 'S36', 'S37', 'S38', 'S39', 'S40']
-        for subject in subjects_train:
-            train_form[subject] = actions
-        for subject in subjects_val:
-            val_form[subject] = actions
-    elif config['split_to_use'] == 'cross_subject_split':
-        
-        subjects_train = config['cross_subject_split']['train_dataset']['subjects']
-        subjects_val = config['cross_subject_split']['val_dataset']['subjects']
-        for subject in subjects_train:
-            actions=config["cross_subject_split"]["train_dataset"]["actions"] if config["cross_subject_split"]["train_dataset"]["actions"] else all_actions
-            train_form[subject] = actions
-        for subject in subjects_val:
-            actions=config["cross_subject_split"]["train_dataset"]["actions"] if config["cross_subject_split"]["train_dataset"]["actions"] else all_actions
-            val_form[subject] = actions
-    elif config['split_to_use'] == 'manual_split':
-        subjects_train = config['manual_split']['train_dataset']['subjects']
-        subjects_val = config['manual_split']['val_dataset']['subjects']
-        actions_train = config['manual_split']['train_dataset']['actions']
-        actions_val = config['manual_split']['val_dataset']['actions']
-        for subject in subjects_train:
-            train_form[subject] = actions_train
-        for subject in subjects_val:
-            val_form[subject] = actions_val
-
-    else:
-        raise Exception("no split mechanique specified")
-    dataset_config = {'train_dataset': {'modalities': config['modalities'],
-                                        'split': 'training',
-                                        'data_form': train_form
-                                        },
-                      'val_dataset': {'modalities': config['modalities'],
-                                      'split': 'validation',
-                                      'data_form': val_form}}
-    return dataset_config
 
 
 class MMFi_Database:
     def __init__(self, data_root):
-        self.data_root = data_root
+        self.data_root:Path = data_root
         self.scenes = {}
         self.subjects = {}
         self.actions = {}
@@ -130,19 +54,12 @@ class MMFi_Database:
                         self.actions[action][scene][subject][modality.name] = data_path
 
 class MMFi_Dataset(Dataset):
-    def __init__(self, data_base, modalities:list[list], split, data_form):
-        self.data_base = data_base
+    def __init__(self, database:MMFi_Database, modalities:list[str], fragment:DatasetFragment):
+        self.database = database
         self.modalities = [MODALITY_MAP[m_str] for m_str in modalities]
-        self.split = split
-        self.data_source = data_form
+        self.fragment:DatasetFragment = fragment
         self.data_list = self.load_data()
 
-    def get_scene(self, subject):
-        scenes = {range(1, 11): 'E01', range(11, 21): 'E02', range(21, 31): 'E03', range(31, 41): 'E04'}
-        for key, value in scenes.items():
-            if int(subject[1:]) in key:
-                return value
-        raise ValueError('Subject does not exist in this dataset.')
 
     def load_data(self):
         raise NotImplementedError("use MMFI_DatasetFrame or MMFI_DatasetSequence")
@@ -156,23 +73,17 @@ class MMFi_Dataset(Dataset):
 class MMFI_DatasetFrame(MMFi_Dataset):
     def load_data(self):
         data_info = []
-        for subject, actions in self.data_source.items():
-            for action in actions:
-                frame_num = 297
-                for idx in range(frame_num):
-                    data_dict = {'modalities': [m.name for m in self.modalities],
-                                    'scene': self.get_scene(subject),
-                                    'subject': subject,
-                                    'action': action,
-                                    'gt_path': os.path.join(self.data_base.data_root, self.get_scene(subject), subject,
-                                                            action, 'ground_truth.npy'),
-                                    'idx': idx
-                                    }
-                    data_valid = True
-                    for mod in self.modalities:
-                        data_dict[mod.name+'_path'] = os.path.join(self.data_base.data_root, self.get_scene(subject), subject, action, mod.name, "frame{:03d}".format(idx+1) + mod.file_ending)
-                    if data_valid:
-                        data_info.append(data_dict)
+        for relative_path in self.fragment.create_tree():
+            frame_num = 297
+            for idx in range(frame_num):
+                data_dict = {'modalities': [m.name for m in self.modalities],
+                                'idx': idx
+                                }
+                data_valid = True
+                for mod in self.modalities:
+                    data_dict[mod.name+'_path'] = self.database.data_root/relative_path/ mod.name/f"frame{idx+1:03d}{mod.file_ending}"
+                if data_valid:
+                    data_info.append(data_dict)
         return data_info
 
     def __getitem__(self, idx):
@@ -199,19 +110,11 @@ class MMFI_DatasetFrame(MMFi_Dataset):
 class MMFI_DatasetSequence(MMFi_Dataset):
     def load_data(self):
         data_info = []
-        for subject, actions in self.data_source.items():
-            for action in actions:
-                data_dict = {'modalities': [m.name for m in self.modalities],
-                                'scene': self.get_scene(subject),
-                                'subject': subject,
-                                'action': action,
-                                'gt_path': os.path.join(self.data_base.data_root, self.get_scene(subject), subject,
-                                                        action, 'ground_truth.npy')
-                                }
-                for mod in self.modalities:
-                    data_dict[mod.name+'_path'] = os.path.join(self.data_base.data_root, self.get_scene(subject), subject,
-                                                        action, mod.name)
-                data_info.append(data_dict)
+        for relative_path in self.fragment.create_tree():
+            data_dict = {'modalities': [m.name for m in self.modalities]}
+            for mod in self.modalities:
+                data_dict[mod.name+'_path'] = self.database.data_root/relative_path/ mod.name
+            data_info.append(data_dict)
 
         return data_info
 
@@ -233,19 +136,6 @@ class MMFI_DatasetSequence(MMFi_Dataset):
 
         return sample
 
-def make_dataset(dataset_root, config):
-    database = MMFi_Database(dataset_root)
-    config_dataset = decode_config(config)
-    if config["data_unit"]== "frame":
-        train_dataset = MMFI_DatasetFrame(database, **config_dataset['train_dataset'])
-        val_dataset = MMFI_DatasetFrame(database, **config_dataset['val_dataset'])
-    elif config["data_unit"]== "sequence":
-        train_dataset = MMFI_DatasetSequence(database, **config_dataset['train_dataset'])
-        val_dataset = MMFI_DatasetSequence(database, **config_dataset['val_dataset'])
-    else:
-        raise ValueError("invalid data_unit")
-
-    return train_dataset, val_dataset
 
 
 def collate_fn_padd(batch):
@@ -278,15 +168,5 @@ def collate_fn_padd(batch):
 
     return batch_data
 
-def make_dataloader(dataset, is_training, generator, batch_size, collate_fn_padd = collate_fn_padd):
-    loader = DataLoader(
-        dataset,
-        batch_size=batch_size,
-        collate_fn=collate_fn_padd,
-        shuffle=is_training,
-        drop_last=is_training,
-        generator=generator,
-    )
-    return loader
 
 

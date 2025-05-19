@@ -1,43 +1,50 @@
-import os
-import argparse
 
+from pathlib import Path
 import yaml
-import numpy as np
 import torch
-
-from mmfi_dataset.mmfi import make_dataset, make_dataloader
-from mmfi_dataset.evaluate import calulate_error
-
-
+from torch.utils.data import DataLoader
+from mmfi_dataset.mmfi import  collate_fn_padd
+from mmfi_dataset.mmfi import MMFi_Database, MMFI_DatasetFrame, MMFI_DatasetSequence
+from mmfi_dataset.decode_config import MMFIConfig,DatasetFragment
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Code implementation with MMFi dataset and library")
-    parser.add_argument("dataset_root", type=str, help="Root of Dataset")
-    parser.add_argument("config_file", type=str, help="Configuration YAML file")
-    args = parser.parse_args()
-
-    dataset_root = args.dataset_root
-    with open(args.config_file, 'r') as fd:
-        config = yaml.load(fd, Loader=yaml.FullLoader)
-
-    train_dataset, val_dataset = make_dataset(dataset_root, config)
-
-    rng_generator = torch.manual_seed(config['init_rand_seed'])
-    train_loader = make_dataloader(train_dataset, is_training=True, generator=rng_generator, **config['train_loader'])
-    val_loader = make_dataloader(val_dataset, is_training=False, generator=rng_generator, **config['validation_loader'])
-
-    # TODO: Settings, e.g., your model, optimizer, device, ...
-
-
-
-    # TODO: Codes for training (and saving models)
-    # Just an example for illustration.
+    dataset_config = MMFIConfig(
+        dataset_root="./dataset/mmfi",
+        modalities=["wifi-csi","rgb"],
+        train=DatasetFragment(
+            environments=["EO1"],
+            # subjects default all
+            actions=["A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08", "A09", "A10", "A11", "A12", "A13", "A14", "A15", "A16", "A17", "A18", "A19", "A20", "A21"]
+        ),
+        validation=DatasetFragment(
+            environments=["EO1"],
+            # subjects default all
+            actions= ["A22", "A23", "A24", "A25", "A26", "A27"]
+        )
+    )
+    database = MMFi_Database(dataset_config.dataset_root)
+    train_dataset = MMFI_DatasetFrame(database,dataset_config.modalities,dataset_config.train) 
+    val_dataset,  = MMFI_DatasetFrame(database,dataset_config.modalities,dataset_config.train) 
+    rng_generator = torch.manual_seed(dataset_config.seed)
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=dataset_config.batch_size,
+        collate_fn=collate_fn_padd,
+        shuffle=True,
+        drop_last=True,
+        generator=rng_generator,
+    )
+    val_loader = DataLoader(
+        train_dataset,
+        batch_size=dataset_config.batch_size,
+        collate_fn=collate_fn_padd,
+        shuffle=False,
+        drop_last=False,
+        generator=rng_generator,
+    )
+    #Just an example for illustration.
     for batch_idx, batch_data in enumerate(train_loader):
         # Please check the data structure here.
         print(batch_data['output'])
-
-    # TODO: Codes for test (if)
-
-
-
+    dataset_config.save("mmfi_config.yaml")
 
