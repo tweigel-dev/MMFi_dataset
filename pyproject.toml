@@ -1,6 +1,6 @@
 [project]
 name = "mmfi-dataset"
-version = "0.2.1"
+version = "0.2.2"
 description = """
 MM-Fi is the first multi-modal non-intrusive 4D human pose estimation dataset with 27 daily or rehabilitation action categories for high-level wireless human sensing tasks. MM-Fi consists of over 320k synchronized frames of five modalities from 40 human subjects in four domains. The annotations include 2D/3D human pose keypoints, 3D position, 3D dense pose, and the category of action. 
 """
