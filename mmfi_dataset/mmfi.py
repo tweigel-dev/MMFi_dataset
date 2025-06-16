@@ -26,7 +26,7 @@ class MMFi_Database:
 
     def load_database(self):
         for scene in sorted(os.listdir(self.data_root)):
-            if scene.startswith("."):
+            if scene.startswith((".","_")) :
                 continue
             if os.path.isfile( os.path.join(self.data_root, scene)):
                 continue
@@ -76,7 +76,7 @@ class MMFI_DatasetFrame(MMFi_Dataset):
         for relative_path in self.fragment.create_tree():
             if not (self.database.data_root/relative_path).exists():
                 continue
-            frame_num = 297
+            frame_num = len(list((self.database.data_root/relative_path/self.modalities[0].name).glob("*")))
             for idx in range(frame_num):
                 data_dict = {'modalities': [m.name for m in self.modalities],
                                 'idx': idx
@@ -84,6 +84,8 @@ class MMFI_DatasetFrame(MMFi_Dataset):
                 data_valid = True
                 for mod in self.modalities:
                     data_dict[mod.name+'_path'] = self.database.data_root/relative_path/ mod.name/f"frame{idx+1:03d}{mod.file_ending}"
+                    if not mod.exists(data_dict[mod.name+'_path']):
+                        data_valid = False
                 if data_valid:
                     data_info.append(data_dict)
         return data_info

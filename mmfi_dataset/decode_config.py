@@ -14,10 +14,6 @@ _all_subjects = ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07', 'S08', 'S09', 
 _all_environments = ["E01","E02","E03","E04"]
 
 
-
-
-
-
 class DatasetFragment(BaseModel):
     environments: list[str] = _all_environments
     subjects: list[str] = _all_subjects
@@ -36,9 +32,6 @@ class EmptyFragment(DatasetFragment):
     environments: list[str] = []
     subjects: list[str] = []
     actions: list[str] = []
-
-
-
 
 
 class MMFIConfig(BaseModel):

@@ -26,6 +26,9 @@ class Modality:
         raise NotImplementedError()
     def __str__(self) -> str:
         return self.name
+    def exists(self, frame_path:Path)-> bool:
+        return frame_path.exists()
+
 class KeypointModality(Modality):
     file_ending=".npy"
 
@@ -48,7 +51,8 @@ class ImageModality(Modality):
     def read_frame(self, frame_path: str | Path):
         frame_path = Path(str(frame_path).replace(self.name,"rgb"))
         return read_image(frame_path)
-
+    def exists(self, frame_path):
+        return Path(str(frame_path).replace(self.name,"rgb")).exists()
 class LidarModality(Modality):
     file_ending=".bin"
 
