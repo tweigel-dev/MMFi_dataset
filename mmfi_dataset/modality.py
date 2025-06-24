@@ -45,14 +45,10 @@ class DepthModality(Modality):
 class ImageModality(Modality):
     file_ending=".png"
     def read_dir(self, path: str | Path):
-        path = Path(str(path).replace(self.name,"rgb"))
         return super().read_dir(path)
 
     def read_frame(self, frame_path: str | Path):
-        frame_path = Path(str(frame_path).replace(self.name,"rgb"))
         return read_image(frame_path)
-    def exists(self, frame_path):
-        return Path(str(frame_path).replace(self.name,"rgb")).exists()
 class LidarModality(Modality):
     file_ending=".bin"
 
