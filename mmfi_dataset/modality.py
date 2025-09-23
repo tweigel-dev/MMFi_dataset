@@ -70,8 +70,12 @@ class MmwaveModality(Modality):
 class FlowModality(Modality):
     file_ending=".pt"
     def read_frame(self, frame_path: str | Path):
-        return torch.load(frame_path,"cpu").to(torch.float16)
-
+        data = torch.load(frame_path,"cpu").to(torch.float16)
+        mask = ~((data**2).sum(dim=0, keepdim=True).sqrt() > 1).to(torch.bool)
+        with torch.no_grad():
+            data[0, *mask] = 0.0
+            data[1, *mask] = 0.0
+        return data
 
 class WifiCSIModality(Modality):
     file_ending=".mat"
@@ -103,7 +107,7 @@ class WifiCSIPhaseModality(WifiCSIModality):
 MODALITY_MAP:dict[str,Modality] = {
     'infra1': KeypointModality('infra1'),
     'infra2': KeypointModality('infra2'),
-    'rgb': KeypointModality('rgb'),
+    'rgb': ImageModality('rgb'),
     'depth': DepthModality('depth'),
     'image': ImageModality('image'),
     'lidar': LidarModality('lidar'),
