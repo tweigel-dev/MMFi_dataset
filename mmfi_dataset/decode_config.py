@@ -26,6 +26,8 @@ class DatasetFragment(BaseModel):
                 for action in self.actions:
                     result.append(f"{env}/{subject}/{action}")
         return set(result)
+    def create_tree_deterministic(self)->list[str]:
+        return sorted(self.create_tree())
 
 
 class EmptyFragment(DatasetFragment):
