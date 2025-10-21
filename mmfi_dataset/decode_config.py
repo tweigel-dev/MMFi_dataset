@@ -43,6 +43,7 @@ class MMFIConfig(BaseModel):
     validation: DatasetFragment
     test: Optional[DatasetFragment]  = EmptyFragment()
     seed:int = numpy.random.randint(1,9999)
+    random:bool = False
     @model_validator(mode='after')
     def _validate_no_overlapp(self):
         train_tree = self.train.create_tree()
