@@ -73,7 +73,7 @@ class MMFi_Dataset(Dataset):
 class MMFI_DatasetFrame(MMFi_Dataset):
     def load_data(self):
         data_info = []
-        for relative_path in self.fragment.create_tree():
+        for relative_path in self.fragment.create_tree_deterministic():
             if not (self.database.data_root/relative_path).exists():
                 continue
             frame_num = len(list((self.database.data_root/relative_path/self.modalities[0].name).glob("*")))
@@ -84,8 +84,6 @@ class MMFI_DatasetFrame(MMFi_Dataset):
                 data_valid = True
                 for mod in self.modalities:
                     data_dict[mod.name+'_path'] = self.database.data_root/relative_path/ mod.name/f"frame{idx+1:03d}{mod.file_ending}"
-                    if not mod.exists(data_dict[mod.name+'_path']):
-                        data_valid = False
                 if data_valid:
                     data_info.append(data_dict)
         return data_info
@@ -110,7 +108,7 @@ class MMFI_DatasetFrame(MMFi_Dataset):
 class MMFI_DatasetSequence(MMFi_Dataset):
     def load_data(self):
         data_info = []
-        for relative_path in self.fragment.create_tree():
+        for relative_path in self.fragment.create_tree_deterministic():
             data_dict = {'modalities': [m.name for m in self.modalities]}
             for mod in self.modalities:
                 data_dict[mod.name+'_path'] = self.database.data_root/relative_path/ mod.name
@@ -150,9 +148,13 @@ def collate_fn_padd(batch):
             _input = torch.nn.utils.rnn.pad_sequence(_input)
             _input = _input.permute(1, 0, 2)
             batch_data[mod] = _input
+        elif mod.name in ['class']:
+            batch_data[mod.name] = [sample[mod.name] for sample in batch if mod.name in sample]
         else:
             if not mod.name in  batch[0]:
                 continue
+            if mod.name == 'csi':
+                pass
             batch_data[mod.name] = torch.concat([sample[mod.name][None] for sample in batch if mod.name in sample])
 
     return batch_data
